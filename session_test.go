@@ -1,6 +1,7 @@
 package bidirpc
 
 import (
+	"fmt"
 	"net"
 	"testing"
 )
@@ -13,10 +14,14 @@ type Reply struct {
 	Msg string
 }
 
-type Demo int
+type Service struct {
+	name      string
+	callCount int
+}
 
-func (d *Demo) SayHi(args Args, reply *Reply) error {
-	reply.Msg = "Hi " + args.Name
+func (s *Service) SayHi(args Args, reply *Reply) error {
+	reply.Msg = fmt.Sprintf("[%v] Hi %v, from %v", s.callCount, args.Name, s.name)
+	s.callCount++
 	return nil
 }
 
@@ -32,18 +37,41 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("NewSession error: %v", err)
 	}
 
-	d0 := new(Demo)
-	sessionYin.Register(d0)
-	d1 := new(Demo)
-	sessionYang.Register(d1)
-
-	args := Args{"Mac"}
-	reply := new(Reply)
-	err = sessionYin.Call("Demo.SayHi", args, reply)
+	serviceYin := &Service{name: "Yin"}
+	err = sessionYin.Register(serviceYin)
 	if err != nil {
-		t.Fatalf("Call error: %v", err)
+		t.Fatalf("Register error: %v", err)
 	}
-	t.Logf("reply = %v", reply.Msg)
+
+	serviceYang := &Service{name: "Yang"}
+	sessionYang.Register(serviceYang)
+	if err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		args := Args{"Windows"}
+		reply := new(Reply)
+		err = sessionYin.Call("Service.SayHi", args, reply)
+		if err != nil {
+			t.Fatalf("Call error: %v", err)
+		}
+		t.Logf("reply = %v\n", reply.Msg)
+
+		args.Name = "OSX"
+		err = sessionYang.Call("Service.SayHi", args, reply)
+		if err != nil {
+			t.Fatalf("Call error: %v", err)
+		}
+		t.Logf("reply = %v\n", reply.Msg)
+
+		args.Name = "iOS"
+		err = sessionYin.Call("Service.SayHi", args, reply)
+		if err != nil {
+			t.Fatalf("Call error: %v", err)
+		}
+		t.Logf("reply = %v\n", reply.Msg)
+	}
 
 	sessionYin.Close()
 	sessionYang.Close()
