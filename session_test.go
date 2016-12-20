@@ -73,6 +73,19 @@ func TestBasic(t *testing.T) {
 		t.Logf("reply = %v\n", reply.Msg)
 	}
 
+	sessionYang.RegisterName("NewService", serviceYang)
+	if err != nil {
+		t.Fatalf("RegisterName error: %v", err)
+	}
+	args := Args{"Linux"}
+	reply := new(Reply)
+	call := sessionYin.Go("NewService.SayHi", args, reply, nil)
+	<-call.Done
+	if call.Error != nil {
+		t.Fatalf("Go error: %v", call.Error)
+	}
+	t.Logf("reply = %v\n", reply.Msg)
+
 	sessionYin.Close()
 	sessionYang.Close()
 }
