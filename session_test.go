@@ -128,6 +128,25 @@ func TestWriteError(t *testing.T) {
 	sessionYin.Close()
 }
 
+func TestWriteError2(t *testing.T) {
+	_, connYang := net.Pipe()
+	connYang.Close()
+
+	sessionYang, err := NewSession(connYang, false)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	args := Args{"Windows"}
+	reply := new(Reply)
+	err = sessionYang.Call("Service.SayHi", args, reply)
+	if err == nil {
+		t.Fatal("Call should return error, got nil")
+	}
+
+	sessionYang.Close()
+}
+
 func TestReadInvalidHeader(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
