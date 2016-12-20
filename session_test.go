@@ -89,3 +89,41 @@ func TestBasic(t *testing.T) {
 	sessionYin.Close()
 	sessionYang.Close()
 }
+
+func TestReadError(t *testing.T) {
+	connYin, connYang := net.Pipe()
+	connYang.Close()
+
+	sessionYin, err := NewSession(connYin, true)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	args := Args{"Windows"}
+	reply := new(Reply)
+	err = sessionYin.Call("Service.SayHi", args, reply)
+	if err == nil {
+		t.Fatal("Call should return error, got nil")
+	}
+
+	sessionYin.Close()
+}
+
+func TestWriteError(t *testing.T) {
+	connYin, _ := net.Pipe()
+	connYin.Close()
+
+	sessionYin, err := NewSession(connYin, true)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	args := Args{"Windows"}
+	reply := new(Reply)
+	err = sessionYin.Call("Service.SayHi", args, reply)
+	if err == nil {
+		t.Fatal("Call should return error, got nil")
+	}
+
+	sessionYin.Close()
+}
