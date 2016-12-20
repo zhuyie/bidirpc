@@ -127,3 +127,47 @@ func TestWriteError(t *testing.T) {
 
 	sessionYin.Close()
 }
+
+func TestReadInvalidHeader(t *testing.T) {
+	connYin, connYang := net.Pipe()
+
+	sessionYin, err := NewSession(connYin, true)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	var header [4]byte
+	connYang.Write(header[:])
+
+	args := Args{"Windows"}
+	reply := new(Reply)
+	err = sessionYin.Call("Service.SayHi", args, reply)
+	if err == nil {
+		t.Fatal("Call should return error, got nil")
+	}
+
+	sessionYin.Close()
+}
+
+func TestReadBodyError(t *testing.T) {
+	connYin, connYang := net.Pipe()
+
+	sessionYin, err := NewSession(connYin, true)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	var header [4]byte
+	encodeHeader(header[:], streamTypeYang, 10)
+	connYang.Write(header[:])
+	connYang.Close()
+
+	args := Args{"Windows"}
+	reply := new(Reply)
+	err = sessionYin.Call("Service.SayHi", args, reply)
+	if err == nil {
+		t.Fatal("Call should return error, got nil")
+	}
+
+	sessionYin.Close()
+}
