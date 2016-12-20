@@ -182,4 +182,5 @@ func (s *Session) doClose(err error) {
 	//fmt.Printf("Session.doClose err=%v\n", err)
 	close(s.closedC)
 	s.conn.Close()
+	s.client.Close()
 }
