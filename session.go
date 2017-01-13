@@ -105,7 +105,6 @@ func (s *Session) readLoop() {
 	var header [4]byte
 	var streamType byte
 	var bodyLen int
-	var bodyBuf []byte
 loop:
 	for {
 		_, err = io.ReadFull(s.conn, header[:])
@@ -120,10 +119,8 @@ loop:
 			break loop
 		}
 
-		if len(bodyBuf) < bodyLen {
-			bodyBuf = make([]byte, 0, bodyLen)
-		}
-		_, err = io.ReadFull(s.conn, bodyBuf[:bodyLen])
+		body := make([]byte, bodyLen)
+		_, err = io.ReadFull(s.conn, body)
 		if err != nil {
 			s.doClose(fmt.Errorf("read body error: %v", err))
 			break loop
@@ -139,7 +136,7 @@ loop:
 		select {
 		case <-s.closedC:
 			break loop
-		case *inC <- bodyBuf[:bodyLen]:
+		case *inC <- body:
 			// do nothing
 		}
 	}
