@@ -3,14 +3,12 @@ package bidirpc
 import (
 	"encoding/gob"
 	"net/rpc"
-	"sync"
 )
 
 type serverCodec struct {
-	stream    *stream
-	writeLock sync.Mutex
-	dec       *gob.Decoder
-	enc       *gob.Encoder
+	stream *stream
+	dec    *gob.Decoder
+	enc    *gob.Encoder
 }
 
 func newServerCodec(s *stream) *serverCodec {
@@ -31,9 +29,6 @@ func (c *serverCodec) ReadRequestBody(body interface{}) error {
 }
 
 func (c *serverCodec) WriteResponse(r *rpc.Response, body interface{}) (err error) {
-	c.writeLock.Lock()
-	defer c.writeLock.Unlock()
-
 	if err = c.enc.Encode(r); err != nil {
 		return
 	}
