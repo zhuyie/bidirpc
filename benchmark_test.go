@@ -45,8 +45,8 @@ func init() {
 	service := &BenchService{}
 
 	connYin, connYang := net.Pipe()
-	sessionYin, _ = NewSession(connYin, true)
-	sessionYang, _ = NewSession(connYang, false)
+	sessionYin, _ = NewSession(connYin, true, 0)
+	sessionYang, _ = NewSession(connYang, false, 0)
 	sessionYin.Register(service)
 
 	connServer, connClient := net.Pipe()

@@ -30,11 +30,11 @@ func (s *Service) SayHi(args Args, reply *Reply) error {
 func TestBasic(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
-	sessionYang, err := NewSession(connYang, false)
+	sessionYang, err := NewSession(connYang, false, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestReadError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestWriteError(t *testing.T) {
 	connYin, _ := net.Pipe()
 	connYin.Close()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestWriteError2(t *testing.T) {
 	_, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYang, err := NewSession(connYang, false)
+	sessionYang, err := NewSession(connYang, false, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestWriteError2(t *testing.T) {
 func TestReadInvalidHeader(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestReadInvalidHeader(t *testing.T) {
 func TestReadBodyError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -196,11 +196,11 @@ func TestReadBodyError(t *testing.T) {
 func TestConcurrent(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true)
+	sessionYin, err := NewSession(connYin, true, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
-	sessionYang, err := NewSession(connYang, false)
+	sessionYang, err := NewSession(connYang, false, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package bidirpc
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -12,11 +13,16 @@ var (
 	streamTypeYang byte = 2
 )
 
+const (
+	defaultBufferPoolSize = 16
+)
+
 // Session is a bi-direction RPC connection.
 type Session struct {
 	conn      io.ReadWriteCloser
 	yinOrYang bool
 	writeLock sync.Mutex
+	bp        *bufferPool
 
 	streamYin  *stream
 	streamYang *stream
@@ -30,10 +36,14 @@ type Session struct {
 }
 
 // NewSession creates a new session.
-func NewSession(conn io.ReadWriteCloser, yinOrYang bool) (*Session, error) {
+func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*Session, error) {
+	if bufferPoolSize == 0 {
+		bufferPoolSize = defaultBufferPoolSize
+	}
 	s := &Session{
 		conn:      conn,
 		yinOrYang: yinOrYang,
+		bp:        newBufferPool(bufferPoolSize),
 		closedC:   make(chan struct{}),
 	}
 
@@ -116,14 +126,16 @@ loop:
 			break loop
 		}
 
-		body := make([]byte, bodyLen)
-		_, err = io.ReadFull(s.conn, body)
+		body := s.bp.Get()
+		body.Grow(bodyLen)
+		_, err = io.CopyN(body, s.conn, int64(bodyLen))
 		if err != nil {
+			s.bp.Put(body)
 			s.doClose(fmt.Errorf("read body error: %v", err))
 			break loop
 		}
 
-		var inC *chan []byte
+		var inC *chan *bytes.Buffer
 		switch streamType {
 		case streamTypeYin:
 			inC = &s.streamYin.inC
