@@ -112,6 +112,8 @@ func (s *Session) readLoop() {
 	var header [4]byte
 	var streamType byte
 	var bodyLen int
+	reader := io.LimitedReader{R: s.conn}
+
 loop:
 	for {
 		_, err = io.ReadFull(s.conn, header[:])
@@ -128,7 +130,8 @@ loop:
 
 		body := s.bp.Get()
 		body.Grow(bodyLen)
-		_, err = io.CopyN(body, s.conn, int64(bodyLen))
+		reader.N = int64(bodyLen)
+		_, err = io.Copy(body, &reader)
 		if err != nil {
 			s.bp.Put(body)
 			s.doClose(fmt.Errorf("read body error: %v", err))
