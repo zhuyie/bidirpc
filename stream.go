@@ -55,6 +55,6 @@ func (s *stream) flush() error {
 	case s.outC <- buffer:
 	}
 
-	s.writer.Truncate(4) // for dummy header
+	s.writer = nil
 	return nil
 }
