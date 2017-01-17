@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -17,12 +18,12 @@ type Reply struct {
 
 type Service struct {
 	name      string
-	callCount int
+	callCount int32
 }
 
 func (s *Service) SayHi(args Args, reply *Reply) error {
-	reply.Msg = fmt.Sprintf("[%v] Hi %v, from %v", s.callCount, args.Name, s.name)
-	s.callCount++
+	reply.Msg = fmt.Sprintf("[%v] Hi %v, from %v", atomic.LoadInt32(&s.callCount), args.Name, s.name)
+	atomic.AddInt32(&s.callCount, 1)
 	return nil
 }
 
@@ -226,7 +227,7 @@ func TestConcurrent(t *testing.T) {
 			for i := 0; i <= CallCount; i++ {
 				args := Args{"Anakin Skywalker"}
 				reply := new(Reply)
-				err = sessionYin.Call("Service.SayHi", args, reply)
+				err := sessionYin.Call("Service.SayHi", args, reply)
 				if err != nil {
 					t.Fatalf("Call error: %v", err)
 				}
@@ -238,7 +239,7 @@ func TestConcurrent(t *testing.T) {
 			for i := 0; i <= CallCount; i++ {
 				args := Args{"Darth Vader"}
 				reply := new(Reply)
-				err = sessionYang.Call("Service.SayHi", args, reply)
+				err := sessionYang.Call("Service.SayHi", args, reply)
 				if err != nil {
 					t.Fatalf("Call error: %v", err)
 				}
