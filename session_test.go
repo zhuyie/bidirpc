@@ -3,6 +3,7 @@ package bidirpc
 import (
 	"fmt"
 	"net"
+	"sync"
 	"testing"
 )
 
@@ -189,4 +190,65 @@ func TestReadBodyError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+}
+
+func TestConcurrent(t *testing.T) {
+	connYin, connYang := net.Pipe()
+
+	sessionYin, err := NewSession(connYin, true)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	sessionYang, err := NewSession(connYang, false)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	serviceYin := &Service{name: "Yin"}
+	err = sessionYin.Register(serviceYin)
+	if err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+
+	serviceYang := &Service{name: "Yang"}
+	sessionYang.Register(serviceYang)
+	if err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+
+	var GoroutineCount = 6
+	var CallCount = 2
+	var wg sync.WaitGroup
+	wg.Add(GoroutineCount * 2)
+	for i := 0; i < GoroutineCount; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i <= CallCount; i++ {
+				args := Args{"Anakin Skywalker"}
+				reply := new(Reply)
+				err = sessionYin.Call("Service.SayHi", args, reply)
+				if err != nil {
+					t.Fatalf("Call error: %v", err)
+				}
+				t.Logf("reply = %v\n", reply.Msg)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i <= CallCount; i++ {
+				args := Args{"Darth Vader"}
+				reply := new(Reply)
+				err = sessionYang.Call("Service.SayHi", args, reply)
+				if err != nil {
+					t.Fatalf("Call error: %v", err)
+				}
+				t.Logf("reply = %v\n", reply.Msg)
+			}
+		}()
+
+	}
+	wg.Wait()
+
+	sessionYin.Close()
+	sessionYang.Close()
 }
