@@ -16,6 +16,7 @@ var (
 type Session struct {
 	conn      io.ReadWriteCloser
 	yinOrYang bool
+	writeLock sync.Mutex
 
 	streamYin  *stream
 	streamYang *stream
@@ -30,33 +31,29 @@ type Session struct {
 
 // NewSession creates a new session.
 func NewSession(conn io.ReadWriteCloser, yinOrYang bool) (*Session, error) {
-	closedC := make(chan struct{})
-	streamYin := newStream(streamTypeYin, closedC)
-	streamYang := newStream(streamTypeYang, closedC)
+	s := &Session{
+		conn:      conn,
+		yinOrYang: yinOrYang,
+		closedC:   make(chan struct{}),
+	}
+
+	s.streamYin = newStream(s, streamTypeYin)
+	s.streamYang = newStream(s, streamTypeYang)
 
 	var cliCodec *clientCodec
 	var svrCodec *serverCodec
 	if yinOrYang {
-		cliCodec = newClientCodec(streamYin)
-		svrCodec = newServerCodec(streamYang)
+		cliCodec = newClientCodec(s.streamYin)
+		svrCodec = newServerCodec(s.streamYang)
 	} else {
-		cliCodec = newClientCodec(streamYang)
-		svrCodec = newServerCodec(streamYin)
+		cliCodec = newClientCodec(s.streamYang)
+		svrCodec = newServerCodec(s.streamYin)
 	}
+	s.client = rpc.NewClientWithCodec(cliCodec)
+	s.server = rpc.NewServer()
 
-	s := &Session{
-		conn:       conn,
-		yinOrYang:  yinOrYang,
-		streamYin:  streamYin,
-		streamYang: streamYang,
-		client:     rpc.NewClientWithCodec(cliCodec),
-		server:     rpc.NewServer(),
-		closedC:    closedC,
-	}
 	go s.server.ServeCodec(svrCodec)
-
 	go s.readLoop()
-	go s.writeLoop()
 
 	return s, nil
 }
@@ -142,29 +139,15 @@ loop:
 	}
 }
 
-func (s *Session) writeLoop() {
-	var err error
-loop:
-	for {
-		select {
-		case <-s.closedC:
-			break loop
+func (s *Session) write(bytes []byte) error {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
 
-		case bytes := <-s.streamYin.outC:
-			_, err = s.conn.Write(bytes)
-			if err != nil {
-				s.doClose(fmt.Errorf("write stream error: %v", err))
-				break loop
-			}
-
-		case bytes := <-s.streamYang.outC:
-			_, err = s.conn.Write(bytes)
-			if err != nil {
-				s.doClose(fmt.Errorf("write stream error: %v", err))
-				break loop
-			}
-		}
+	_, err := s.conn.Write(bytes)
+	if err != nil {
+		s.doClose(fmt.Errorf("write error: %v", err))
 	}
+	return err
 }
 
 func (s *Session) doClose(err error) {

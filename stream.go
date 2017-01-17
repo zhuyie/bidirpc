@@ -6,20 +6,18 @@ import (
 )
 
 type stream struct {
-	id             byte
-	sessionClosedC <-chan struct{}
-	reader         *bytes.Buffer
-	inC            chan []byte
-	writer         *bytes.Buffer
-	outC           chan []byte
+	session *Session
+	id      byte
+	reader  *bytes.Buffer
+	inC     chan []byte
+	writer  bytes.Buffer
 }
 
-func newStream(id byte, sessionClosedC <-chan struct{}) *stream {
+func newStream(session *Session, id byte) *stream {
 	s := &stream{
-		id:             id,
-		sessionClosedC: sessionClosedC,
-		inC:            make(chan []byte),
-		outC:           make(chan []byte),
+		session: session,
+		id:      id,
+		inC:     make(chan []byte),
 	}
 	return s
 }
@@ -27,7 +25,7 @@ func newStream(id byte, sessionClosedC <-chan struct{}) *stream {
 func (s *stream) Read(p []byte) (n int, err error) {
 	if s.reader == nil || s.reader.Len() == 0 {
 		select {
-		case <-s.sessionClosedC:
+		case <-s.session.closedC:
 			return 0, errors.New("stream read from a closed session")
 		case data := <-s.inC: // only the message body
 			s.reader = bytes.NewBuffer(data)
@@ -37,24 +35,20 @@ func (s *stream) Read(p []byte) (n int, err error) {
 }
 
 func (s *stream) Write(p []byte) (n int, err error) {
-	if s.writer == nil {
-		s.writer = bytes.NewBuffer(nil)
+	if s.writer.Len() == 0 {
 		var dummyHeader [4]byte
 		s.writer.Write(dummyHeader[:])
 	}
 	return s.writer.Write(p)
 }
 
-func (s *stream) flush() error {
+func (s *stream) flush() (err error) {
 	buffer := s.writer.Bytes()
 	bodyLen := s.writer.Len() - 4
 	encodeHeader(buffer, s.id, bodyLen)
-	select {
-	case <-s.sessionClosedC:
-		return errors.New("stream flush to a closed session")
-	case s.outC <- buffer:
-	}
 
-	s.writer = nil
-	return nil
+	err = s.session.write(buffer)
+
+	s.writer.Reset()
+	return
 }
