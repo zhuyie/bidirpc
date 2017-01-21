@@ -27,8 +27,8 @@ type Session struct {
 	streamYin  *stream
 	streamYang *stream
 
-	client *rpc.Client
-	server *rpc.Server
+	client   *rpc.Client
+	registry *Registry
 
 	closeLock sync.Mutex
 	closed    bool
@@ -36,7 +36,7 @@ type Session struct {
 }
 
 // NewSession creates a new session.
-func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*Session, error) {
+func NewSession(conn io.ReadWriteCloser, yinOrYang bool, registry *Registry, bufferPoolSize int) (*Session, error) {
 	if bufferPoolSize == 0 {
 		bufferPoolSize = defaultBufferPoolSize
 	}
@@ -60,9 +60,9 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*S
 		svrCodec = newServerCodec(s.streamYin)
 	}
 	s.client = rpc.NewClientWithCodec(cliCodec)
-	s.server = rpc.NewServer()
+	s.registry = registry
 
-	go s.server.ServeCodec(svrCodec)
+	go s.registry.server.ServeCodec(svrCodec)
 
 	return s, nil
 }
@@ -75,26 +75,6 @@ func (s *Session) Serve() error {
 	}
 
 	return nil
-}
-
-// Register publishes in the server the set of methods of the
-// receiver value that satisfy the following conditions:
-//  - exported method of exported type
-//  - two arguments, both of exported type
-//  - the second argument is a pointer
-//  - one return value, of type error
-// It returns an error if the receiver is not an exported type or has
-// no suitable methods. It also logs the error using package log.
-// The client accesses each method using a string of the form "Type.Method",
-// where Type is the receiver's concrete type.
-func (s *Session) Register(rcvr interface{}) error {
-	return s.server.Register(rcvr)
-}
-
-// RegisterName is like Register but uses the provided name for the type
-// instead of the receiver's concrete type.
-func (s *Session) RegisterName(name string, rcvr interface{}) error {
-	return s.server.RegisterName(name, rcvr)
 }
 
 // Go invokes the function asynchronously. It returns the Call structure representing

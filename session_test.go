@@ -30,25 +30,28 @@ func (s *Service) SayHi(args Args, reply *Reply) error {
 func TestBasic(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
-	sessionYang, err := NewSession(connYang, false, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
+	registryYin := NewRegistry()
+	registryYang := NewRegistry()
 
 	serviceYin := &Service{name: "Yin"}
-	err = sessionYin.Register(serviceYin)
+	err := registryYin.Register(serviceYin)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
 	serviceYang := &Service{name: "Yang"}
-	sessionYang.Register(serviceYang)
+	err = registryYang.Register(serviceYang)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
+	}
+
+	sessionYin, err := NewSession(connYin, true, registryYin, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	sessionYang, err := NewSession(connYang, false, registryYang, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
 	}
 
 	sessionWait := sync.WaitGroup{}
@@ -90,7 +93,7 @@ func TestBasic(t *testing.T) {
 		t.Logf("reply = %v\n", reply.Msg)
 	}
 
-	sessionYang.RegisterName("NewService", serviceYang)
+	err = registryYang.RegisterName("NewService", serviceYang)
 	if err != nil {
 		t.Fatalf("RegisterName error: %v", err)
 	}
@@ -112,7 +115,7 @@ func TestReadError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -141,7 +144,7 @@ func TestWriteError(t *testing.T) {
 	connYin, _ := net.Pipe()
 	connYin.Close()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -170,7 +173,7 @@ func TestWriteError2(t *testing.T) {
 	_, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYang, err := NewSession(connYang, false, 0)
+	sessionYang, err := NewSession(connYang, false, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -198,7 +201,7 @@ func TestWriteError2(t *testing.T) {
 func TestReadInvalidHeader(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -231,7 +234,7 @@ func TestReadInvalidHeader(t *testing.T) {
 func TestReadBodyError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -264,25 +267,28 @@ func TestReadBodyError(t *testing.T) {
 func TestConcurrent(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
-	sessionYang, err := NewSession(connYang, false, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
+	registryYin := NewRegistry()
+	registryYang := NewRegistry()
 
 	serviceYin := &Service{name: "Yin"}
-	err = sessionYin.Register(serviceYin)
+	err := registryYin.Register(serviceYin)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
 	serviceYang := &Service{name: "Yang"}
-	sessionYang.Register(serviceYang)
+	err = registryYang.Register(serviceYang)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
+	}
+
+	sessionYin, err := NewSession(connYin, true, registryYin, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	sessionYang, err := NewSession(connYang, false, registryYang, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
 	}
 
 	sessionWait := sync.WaitGroup{}
@@ -300,9 +306,9 @@ func TestConcurrent(t *testing.T) {
 		sessionWait.Done()
 	}()
 
-	var wg sync.WaitGroup
 	var GoroutineCount = 6
 	var CallCount = 2
+	var wg sync.WaitGroup
 	wg.Add(GoroutineCount * 2)
 	for i := 0; i < GoroutineCount; i++ {
 		go func() {
