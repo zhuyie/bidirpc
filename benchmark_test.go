@@ -48,6 +48,12 @@ func init() {
 	sessionYin, _ = NewSession(connYin, true, 0)
 	sessionYang, _ = NewSession(connYang, false, 0)
 	sessionYin.Register(service)
+	go func() {
+		_ = sessionYin.Serve()
+	}()
+	go func() {
+		_ = sessionYang.Serve()
+	}()
 
 	connServer, connClient := net.Pipe()
 	client = rpc.NewClient(connClient)

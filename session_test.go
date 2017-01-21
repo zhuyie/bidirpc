@@ -51,6 +51,21 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(2)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
 	for i := 0; i < 3; i++ {
 		args := Args{"Windows"}
 		reply := new(Reply)
@@ -90,6 +105,7 @@ func TestBasic(t *testing.T) {
 
 	sessionYin.Close()
 	sessionYang.Close()
+	sessionWait.Wait()
 }
 
 func TestReadError(t *testing.T) {
@@ -101,6 +117,15 @@ func TestReadError(t *testing.T) {
 		t.Fatalf("NewSession error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
 	args := Args{"Windows"}
 	reply := new(Reply)
 	err = sessionYin.Call("Service.SayHi", args, reply)
@@ -109,6 +134,7 @@ func TestReadError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestWriteError(t *testing.T) {
@@ -120,6 +146,15 @@ func TestWriteError(t *testing.T) {
 		t.Fatalf("NewSession error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
 	args := Args{"Windows"}
 	reply := new(Reply)
 	err = sessionYin.Call("Service.SayHi", args, reply)
@@ -128,6 +163,7 @@ func TestWriteError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestWriteError2(t *testing.T) {
@@ -139,6 +175,15 @@ func TestWriteError2(t *testing.T) {
 		t.Fatalf("NewSession error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
 	args := Args{"Windows"}
 	reply := new(Reply)
 	err = sessionYang.Call("Service.SayHi", args, reply)
@@ -147,6 +192,7 @@ func TestWriteError2(t *testing.T) {
 	}
 
 	sessionYang.Close()
+	sessionWait.Wait()
 }
 
 func TestReadInvalidHeader(t *testing.T) {
@@ -156,6 +202,17 @@ func TestReadInvalidHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			if err == nil {
+				t.Fatal("Call should return error, got nil")
+			}
+		}
+		sessionWait.Done()
+	}()
 
 	var header [4]byte
 	connYang.Write(header[:])
@@ -168,6 +225,7 @@ func TestReadInvalidHeader(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestReadBodyError(t *testing.T) {
@@ -177,6 +235,15 @@ func TestReadBodyError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	var header [4]byte
 	encodeHeader(header[:], streamTypeYang, 10)
@@ -191,6 +258,7 @@ func TestReadBodyError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestConcurrent(t *testing.T) {
@@ -217,9 +285,24 @@ func TestConcurrent(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(2)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
+	var wg sync.WaitGroup
 	var GoroutineCount = 6
 	var CallCount = 2
-	var wg sync.WaitGroup
 	wg.Add(GoroutineCount * 2)
 	for i := 0; i < GoroutineCount; i++ {
 		go func() {
@@ -252,4 +335,5 @@ func TestConcurrent(t *testing.T) {
 
 	sessionYin.Close()
 	sessionYang.Close()
+	sessionWait.Wait()
 }

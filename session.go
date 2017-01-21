@@ -63,9 +63,18 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*S
 	s.server = rpc.NewServer()
 
 	go s.server.ServeCodec(svrCodec)
-	go s.readLoop()
 
 	return s, nil
+}
+
+// Serve starts the event loop, this is a blocking call.
+func (s *Session) Serve() error {
+	err := s.readLoop()
+	if err != nil && err != io.ErrClosedPipe && err != io.EOF {
+		return err
+	}
+
+	return nil
 }
 
 // Register publishes in the server the set of methods of the
@@ -103,29 +112,29 @@ func (s *Session) Call(serviceMethod string, args interface{}, reply interface{}
 
 // Close closes the session.
 func (s *Session) Close() error {
-	s.doClose(nil)
-	return nil
+	return s.doClose()
 }
 
-func (s *Session) readLoop() {
+func (s *Session) readLoop() error {
 	var err error
 	var header [4]byte
 	var streamType byte
 	var bodyLen int
 	reader := io.LimitedReader{R: s.conn}
+	defer func() {
+		// Swallow the close error
+		_ = s.doClose()
+	}()
 
-loop:
 	for {
 		_, err = io.ReadFull(s.conn, header[:])
 		if err != nil {
-			s.doClose(fmt.Errorf("read header error: %v", err))
-			break loop
+			return err
 		}
 
 		streamType, bodyLen = decodeHeader(header[:])
 		if (streamType != streamTypeYin && streamType != streamTypeYang) || (bodyLen <= 0) {
-			s.doClose(fmt.Errorf("read a invalid header"))
-			break loop
+			return fmt.Errorf("read a invalid header")
 		}
 
 		body := s.bp.Get()
@@ -134,8 +143,7 @@ loop:
 		_, err = io.Copy(body, &reader)
 		if err != nil {
 			s.bp.Put(body)
-			s.doClose(fmt.Errorf("read body error: %v", err))
-			break loop
+			return err
 		}
 
 		var inC *chan *bytes.Buffer
@@ -147,7 +155,7 @@ loop:
 		}
 		select {
 		case <-s.closedC:
-			break loop
+			return nil
 		case *inC <- body:
 			// do nothing
 		}
@@ -160,22 +168,27 @@ func (s *Session) write(bytes []byte) error {
 
 	_, err := s.conn.Write(bytes)
 	if err != nil {
-		s.doClose(fmt.Errorf("write error: %v", err))
+		if closeErr := s.doClose(); closeErr != nil {
+			return closeErr
+		}
 	}
 	return err
 }
 
-func (s *Session) doClose(err error) {
+func (s *Session) doClose() error {
 	s.closeLock.Lock()
 	defer s.closeLock.Unlock()
 
 	if s.closed {
-		return
+		return nil
 	}
 	s.closed = true
 
-	//fmt.Printf("Session.doClose err=%v\n", err)
 	close(s.closedC)
-	s.conn.Close()
-	s.client.Close()
+	connErr := s.conn.Close()
+	err := s.client.Close()
+	if connErr != nil {
+		return connErr
+	}
+	return err
 }
