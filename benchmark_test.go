@@ -50,8 +50,8 @@ func init() {
 	registryYin = NewRegistry()
 	registryYin.Register(service)
 	registryYang = NewRegistry()
-	sessionYin, _ = NewSession(connYin, true, registryYin, 0)
-	sessionYang, _ = NewSession(connYang, false, registryYang, 0)
+	sessionYin, _ = NewSession(connYin, Yin, registryYin, 0)
+	sessionYang, _ = NewSession(connYang, Yang, registryYang, 0)
 	go func() {
 		_ = sessionYin.Serve()
 	}()

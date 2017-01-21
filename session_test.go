@@ -45,11 +45,11 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	sessionYin, err := NewSession(connYin, true, registryYin, 0)
+	sessionYin, err := NewSession(connYin, Yin, registryYin, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
-	sessionYang, err := NewSession(connYang, false, registryYang, 0)
+	sessionYang, err := NewSession(connYang, Yang, registryYang, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestReadError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestWriteError(t *testing.T) {
 	connYin, _ := net.Pipe()
 	connYin.Close()
 
-	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestWriteError2(t *testing.T) {
 	_, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYang, err := NewSession(connYang, false, NewRegistry(), 0)
+	sessionYang, err := NewSession(connYang, Yang, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestWriteError2(t *testing.T) {
 func TestReadInvalidHeader(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestReadInvalidHeader(t *testing.T) {
 func TestReadBodyError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, NewRegistry(), 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestReadBodyError(t *testing.T) {
 	}()
 
 	var header [4]byte
-	encodeHeader(header[:], streamTypeYang, 10)
+	encodeHeader(header[:], byte(Yang), 10)
 	connYang.Write(header[:])
 	connYang.Close()
 
@@ -282,11 +282,11 @@ func TestConcurrent(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	sessionYin, err := NewSession(connYin, true, registryYin, 0)
+	sessionYin, err := NewSession(connYin, Yin, registryYin, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
-	sessionYang, err := NewSession(connYang, false, registryYang, 0)
+	sessionYang, err := NewSession(connYang, Yang, registryYang, 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}

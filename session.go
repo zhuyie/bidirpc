@@ -8,9 +8,15 @@ import (
 	"sync"
 )
 
+// YinYang is used to determine which side of the connection the client is
+// handling
+type YinYang byte
+
 var (
-	streamTypeYin  byte = 1
-	streamTypeYang byte = 2
+	// Yin connection identifier
+	Yin YinYang = 1
+	// Yang connection identifier
+	Yang YinYang = 2
 )
 
 const (
@@ -20,7 +26,7 @@ const (
 // Session is a bi-direction RPC connection.
 type Session struct {
 	conn      io.ReadWriteCloser
-	yinOrYang bool
+	yinOrYang YinYang
 	writeLock sync.Mutex
 	bp        *bufferPool
 
@@ -36,7 +42,7 @@ type Session struct {
 }
 
 // NewSession creates a new session.
-func NewSession(conn io.ReadWriteCloser, yinOrYang bool, registry *Registry, bufferPoolSize int) (*Session, error) {
+func NewSession(conn io.ReadWriteCloser, yinOrYang YinYang, registry *Registry, bufferPoolSize int) (*Session, error) {
 	if bufferPoolSize == 0 {
 		bufferPoolSize = defaultBufferPoolSize
 	}
@@ -47,12 +53,12 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang bool, registry *Registry, buf
 		closedC:   make(chan struct{}),
 	}
 
-	s.streamYin = newStream(s, streamTypeYin)
-	s.streamYang = newStream(s, streamTypeYang)
+	s.streamYin = newStream(s, byte(Yin))
+	s.streamYang = newStream(s, byte(Yang))
 
 	var cliCodec *clientCodec
 	var svrCodec *serverCodec
-	if yinOrYang {
+	if yinOrYang == Yin {
 		cliCodec = newClientCodec(s.streamYin)
 		svrCodec = newServerCodec(s.streamYang)
 	} else {
@@ -113,7 +119,7 @@ func (s *Session) readLoop() error {
 		}
 
 		streamType, bodyLen = decodeHeader(header[:])
-		if (streamType != streamTypeYin && streamType != streamTypeYang) || (bodyLen <= 0) {
+		if (YinYang(streamType) != Yin && YinYang(streamType) != Yang) || (bodyLen <= 0) {
 			return fmt.Errorf("read a invalid header")
 		}
 
@@ -127,10 +133,10 @@ func (s *Session) readLoop() error {
 		}
 
 		var inC *chan *bytes.Buffer
-		switch streamType {
-		case streamTypeYin:
+		switch YinYang(streamType) {
+		case Yin:
 			inC = &s.streamYin.inC
-		case streamTypeYang:
+		case Yang:
 			inC = &s.streamYang.inC
 		}
 		select {
