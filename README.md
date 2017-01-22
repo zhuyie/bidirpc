@@ -24,18 +24,19 @@ import (
     "github.com/zhuyie/bidirpc"
 )
 
+type YourService struct{}
 
 var conn io.ReadWriteCloser
 
-// Create a registry, and register your available services, Service follows
+// Create a registry, and register your available services, YourService follows
 // net/rpc semantics
 registry := bidirpc.NewRegistry()
-registry.Register(&Service{})
+registry.Register(&YourService{})
 
 // TODO: Establish your connection before passing it to the session
 
 // Create a new session
-session, err := bidirpc.NewSession(conn, Yin, registry, 0)
+session, err := bidirpc.NewSession(conn, bidirpc.Yin, registry, 0)
 if err != nil {
 	log.Fatal(err)
 }
