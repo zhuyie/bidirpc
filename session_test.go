@@ -2,6 +2,8 @@ package bidirpc
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -342,4 +344,33 @@ func TestConcurrent(t *testing.T) {
 	sessionYin.Close()
 	sessionYang.Close()
 	sessionWait.Wait()
+}
+
+func ExampleSession() {
+	var conn io.ReadWriteCloser
+
+	// Create a registry, and register your available services
+	registry := NewRegistry()
+	registry.Register(&Service{})
+
+	// TODO: Establish your connection before passing it to the session
+
+	// Create a new session
+	session, err := NewSession(conn, Yin, registry, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Clean up session resources
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Start the event loop, this is a blocking call, so place it in a goroutine
+	// if you need to move on.  The call will return when the connection is
+	// terminated.
+	if err = session.Serve(); err != nil {
+		log.Fatal(err)
+	}
 }
