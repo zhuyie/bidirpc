@@ -2,6 +2,8 @@ package bidirpc
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -30,26 +32,44 @@ func (s *Service) SayHi(args Args, reply *Reply) error {
 func TestBasic(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
-	sessionYang, err := NewSession(connYang, false, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
+	registryYin := NewRegistry()
+	registryYang := NewRegistry()
 
 	serviceYin := &Service{name: "Yin"}
-	err = sessionYin.Register(serviceYin)
+	err := registryYin.Register(serviceYin)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
 	serviceYang := &Service{name: "Yang"}
-	sessionYang.Register(serviceYang)
+	err = registryYang.Register(serviceYang)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
+
+	sessionYin, err := NewSession(connYin, Yin, registryYin, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	sessionYang, err := NewSession(connYang, Yang, registryYang, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(2)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	for i := 0; i < 3; i++ {
 		args := Args{"Windows"}
@@ -75,7 +95,7 @@ func TestBasic(t *testing.T) {
 		t.Logf("reply = %v\n", reply.Msg)
 	}
 
-	sessionYang.RegisterName("NewService", serviceYang)
+	err = registryYang.RegisterName("NewService", serviceYang)
 	if err != nil {
 		t.Fatalf("RegisterName error: %v", err)
 	}
@@ -90,16 +110,26 @@ func TestBasic(t *testing.T) {
 
 	sessionYin.Close()
 	sessionYang.Close()
+	sessionWait.Wait()
 }
 
 func TestReadError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	args := Args{"Windows"}
 	reply := new(Reply)
@@ -109,16 +139,26 @@ func TestReadError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestWriteError(t *testing.T) {
 	connYin, _ := net.Pipe()
 	connYin.Close()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	args := Args{"Windows"}
 	reply := new(Reply)
@@ -128,16 +168,26 @@ func TestWriteError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestWriteError2(t *testing.T) {
 	_, connYang := net.Pipe()
 	connYang.Close()
 
-	sessionYang, err := NewSession(connYang, false, 0)
+	sessionYang, err := NewSession(connYang, Yang, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	args := Args{"Windows"}
 	reply := new(Reply)
@@ -147,15 +197,27 @@ func TestWriteError2(t *testing.T) {
 	}
 
 	sessionYang.Close()
+	sessionWait.Wait()
 }
 
 func TestReadInvalidHeader(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			if err == nil {
+				t.Fatal("Call should return error, got nil")
+			}
+		}
+		sessionWait.Done()
+	}()
 
 	var header [4]byte
 	connYang.Write(header[:])
@@ -168,18 +230,28 @@ func TestReadInvalidHeader(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestReadBodyError(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
+	sessionYin, err := NewSession(connYin, Yin, NewRegistry(), 0)
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
 
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(1)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+
 	var header [4]byte
-	encodeHeader(header[:], streamTypeYang, 10)
+	encodeHeader(header[:], byte(Yang), 10)
 	connYang.Write(header[:])
 	connYang.Close()
 
@@ -191,31 +263,50 @@ func TestReadBodyError(t *testing.T) {
 	}
 
 	sessionYin.Close()
+	sessionWait.Wait()
 }
 
 func TestConcurrent(t *testing.T) {
 	connYin, connYang := net.Pipe()
 
-	sessionYin, err := NewSession(connYin, true, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
-	sessionYang, err := NewSession(connYang, false, 0)
-	if err != nil {
-		t.Fatalf("NewSession error: %v", err)
-	}
+	registryYin := NewRegistry()
+	registryYang := NewRegistry()
 
 	serviceYin := &Service{name: "Yin"}
-	err = sessionYin.Register(serviceYin)
+	err := registryYin.Register(serviceYin)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
 	serviceYang := &Service{name: "Yang"}
-	sessionYang.Register(serviceYang)
+	err = registryYang.Register(serviceYang)
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
+
+	sessionYin, err := NewSession(connYin, Yin, registryYin, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	sessionYang, err := NewSession(connYang, Yang, registryYang, 0)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+
+	sessionWait := sync.WaitGroup{}
+	sessionWait.Add(2)
+	go func() {
+		if err := sessionYin.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
+	go func() {
+		if err := sessionYang.Serve(); err != nil {
+			t.Fatal("Eventloop error: %v", err)
+		}
+		sessionWait.Done()
+	}()
 
 	var GoroutineCount = 6
 	var CallCount = 2
@@ -252,4 +343,34 @@ func TestConcurrent(t *testing.T) {
 
 	sessionYin.Close()
 	sessionYang.Close()
+	sessionWait.Wait()
+}
+
+func ExampleSession() {
+	var conn io.ReadWriteCloser
+
+	// Create a registry, and register your available services
+	registry := NewRegistry()
+	registry.Register(&Service{})
+
+	// TODO: Establish your connection before passing it to the session
+
+	// Create a new session
+	session, err := NewSession(conn, Yin, registry, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Clean up session resources
+	defer func() {
+		if err := session.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Start the event loop, this is a blocking call, so place it in a goroutine
+	// if you need to move on.  The call will return when the connection is
+	// terminated.
+	if err = session.Serve(); err != nil {
+		log.Fatal(err)
+	}
 }

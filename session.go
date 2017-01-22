@@ -8,9 +8,15 @@ import (
 	"sync"
 )
 
+// YinYang is used to determine which side of the connection the client is
+// handling
+type YinYang byte
+
 var (
-	streamTypeYin  byte = 1
-	streamTypeYang byte = 2
+	// Yin connection identifier
+	Yin YinYang = 1
+	// Yang connection identifier
+	Yang YinYang = 2
 )
 
 const (
@@ -20,15 +26,15 @@ const (
 // Session is a bi-direction RPC connection.
 type Session struct {
 	conn      io.ReadWriteCloser
-	yinOrYang bool
+	yinOrYang YinYang
 	writeLock sync.Mutex
 	bp        *bufferPool
 
 	streamYin  *stream
 	streamYang *stream
 
-	client *rpc.Client
-	server *rpc.Server
+	client   *rpc.Client
+	registry *Registry
 
 	closeLock sync.Mutex
 	closed    bool
@@ -36,7 +42,7 @@ type Session struct {
 }
 
 // NewSession creates a new session.
-func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*Session, error) {
+func NewSession(conn io.ReadWriteCloser, yinOrYang YinYang, registry *Registry, bufferPoolSize int) (*Session, error) {
 	if bufferPoolSize == 0 {
 		bufferPoolSize = defaultBufferPoolSize
 	}
@@ -47,12 +53,12 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*S
 		closedC:   make(chan struct{}),
 	}
 
-	s.streamYin = newStream(s, streamTypeYin)
-	s.streamYang = newStream(s, streamTypeYang)
+	s.streamYin = newStream(s, byte(Yin))
+	s.streamYang = newStream(s, byte(Yang))
 
 	var cliCodec *clientCodec
 	var svrCodec *serverCodec
-	if yinOrYang {
+	if yinOrYang == Yin {
 		cliCodec = newClientCodec(s.streamYin)
 		svrCodec = newServerCodec(s.streamYang)
 	} else {
@@ -60,32 +66,21 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang bool, bufferPoolSize int) (*S
 		svrCodec = newServerCodec(s.streamYin)
 	}
 	s.client = rpc.NewClientWithCodec(cliCodec)
-	s.server = rpc.NewServer()
+	s.registry = registry
 
-	go s.server.ServeCodec(svrCodec)
-	go s.readLoop()
+	go s.registry.server.ServeCodec(svrCodec)
 
 	return s, nil
 }
 
-// Register publishes in the server the set of methods of the
-// receiver value that satisfy the following conditions:
-//  - exported method of exported type
-//  - two arguments, both of exported type
-//  - the second argument is a pointer
-//  - one return value, of type error
-// It returns an error if the receiver is not an exported type or has
-// no suitable methods. It also logs the error using package log.
-// The client accesses each method using a string of the form "Type.Method",
-// where Type is the receiver's concrete type.
-func (s *Session) Register(rcvr interface{}) error {
-	return s.server.Register(rcvr)
-}
+// Serve starts the event loop, this is a blocking call.
+func (s *Session) Serve() error {
+	err := s.readLoop()
+	if err != nil && err != io.ErrClosedPipe && err != io.EOF {
+		return err
+	}
 
-// RegisterName is like Register but uses the provided name for the type
-// instead of the receiver's concrete type.
-func (s *Session) RegisterName(name string, rcvr interface{}) error {
-	return s.server.RegisterName(name, rcvr)
+	return nil
 }
 
 // Go invokes the function asynchronously. It returns the Call structure representing
@@ -103,29 +98,29 @@ func (s *Session) Call(serviceMethod string, args interface{}, reply interface{}
 
 // Close closes the session.
 func (s *Session) Close() error {
-	s.doClose(nil)
-	return nil
+	return s.doClose()
 }
 
-func (s *Session) readLoop() {
+func (s *Session) readLoop() error {
 	var err error
 	var header [4]byte
 	var streamType byte
 	var bodyLen int
 	reader := io.LimitedReader{R: s.conn}
+	defer func() {
+		// Swallow the close error
+		_ = s.doClose()
+	}()
 
-loop:
 	for {
 		_, err = io.ReadFull(s.conn, header[:])
 		if err != nil {
-			s.doClose(fmt.Errorf("read header error: %v", err))
-			break loop
+			return err
 		}
 
 		streamType, bodyLen = decodeHeader(header[:])
-		if (streamType != streamTypeYin && streamType != streamTypeYang) || (bodyLen <= 0) {
-			s.doClose(fmt.Errorf("read a invalid header"))
-			break loop
+		if (YinYang(streamType) != Yin && YinYang(streamType) != Yang) || (bodyLen <= 0) {
+			return fmt.Errorf("read a invalid header")
 		}
 
 		body := s.bp.Get()
@@ -134,20 +129,19 @@ loop:
 		_, err = io.Copy(body, &reader)
 		if err != nil {
 			s.bp.Put(body)
-			s.doClose(fmt.Errorf("read body error: %v", err))
-			break loop
+			return err
 		}
 
 		var inC *chan *bytes.Buffer
-		switch streamType {
-		case streamTypeYin:
+		switch YinYang(streamType) {
+		case Yin:
 			inC = &s.streamYin.inC
-		case streamTypeYang:
+		case Yang:
 			inC = &s.streamYang.inC
 		}
 		select {
 		case <-s.closedC:
-			break loop
+			return nil
 		case *inC <- body:
 			// do nothing
 		}
@@ -160,22 +154,27 @@ func (s *Session) write(bytes []byte) error {
 
 	_, err := s.conn.Write(bytes)
 	if err != nil {
-		s.doClose(fmt.Errorf("write error: %v", err))
+		if closeErr := s.doClose(); closeErr != nil {
+			return closeErr
+		}
 	}
 	return err
 }
 
-func (s *Session) doClose(err error) {
+func (s *Session) doClose() error {
 	s.closeLock.Lock()
 	defer s.closeLock.Unlock()
 
 	if s.closed {
-		return
+		return nil
 	}
 	s.closed = true
 
-	//fmt.Printf("Session.doClose err=%v\n", err)
 	close(s.closedC)
-	s.conn.Close()
-	s.client.Close()
+	connErr := s.conn.Close()
+	err := s.client.Close()
+	if connErr != nil {
+		return connErr
+	}
+	return err
 }

@@ -35,19 +35,29 @@ func (s *BenchService) EchoString(args StringArgs, reply *StringReply) error {
 }
 
 var (
-	sessionYin  *Session
-	sessionYang *Session
-	client      *rpc.Client
-	server      *rpc.Server
+	sessionYin   *Session
+	sessionYang  *Session
+	registryYin  *Registry
+	registryYang *Registry
+	client       *rpc.Client
+	server       *rpc.Server
 )
 
 func init() {
 	service := &BenchService{}
 
 	connYin, connYang := net.Pipe()
-	sessionYin, _ = NewSession(connYin, true, 0)
-	sessionYang, _ = NewSession(connYang, false, 0)
-	sessionYin.Register(service)
+	registryYin = NewRegistry()
+	registryYin.Register(service)
+	registryYang = NewRegistry()
+	sessionYin, _ = NewSession(connYin, Yin, registryYin, 0)
+	sessionYang, _ = NewSession(connYang, Yang, registryYang, 0)
+	go func() {
+		_ = sessionYin.Serve()
+	}()
+	go func() {
+		_ = sessionYang.Serve()
+	}()
 
 	connServer, connClient := net.Pipe()
 	client = rpc.NewClient(connClient)
