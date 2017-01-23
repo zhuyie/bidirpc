@@ -60,13 +60,13 @@ func TestBasic(t *testing.T) {
 	sessionWait.Add(2)
 	go func() {
 		if err := sessionYin.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
 	go func() {
 		if err := sessionYang.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
@@ -126,7 +126,7 @@ func TestReadError(t *testing.T) {
 	sessionWait.Add(1)
 	go func() {
 		if err := sessionYin.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
@@ -155,7 +155,7 @@ func TestWriteError(t *testing.T) {
 	sessionWait.Add(1)
 	go func() {
 		if err := sessionYin.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
@@ -184,7 +184,7 @@ func TestWriteError2(t *testing.T) {
 	sessionWait.Add(1)
 	go func() {
 		if err := sessionYang.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
@@ -245,7 +245,7 @@ func TestReadBodyError(t *testing.T) {
 	sessionWait.Add(1)
 	go func() {
 		if err := sessionYin.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
@@ -297,13 +297,13 @@ func TestConcurrent(t *testing.T) {
 	sessionWait.Add(2)
 	go func() {
 		if err := sessionYin.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
 	go func() {
 		if err := sessionYang.Serve(); err != nil {
-			t.Fatal("Eventloop error: %v", err)
+			t.Fatalf("Eventloop error: %v", err)
 		}
 		sessionWait.Done()
 	}()
