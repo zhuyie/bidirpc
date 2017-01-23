@@ -123,7 +123,7 @@ func (s *Session) readLoop() error {
 			return fmt.Errorf("read a invalid header")
 		}
 
-		body := s.bp.Get()
+		body := s.bp.Get() // gets a buffer from the bufferPool
 		body.Grow(bodyLen)
 		reader.N = int64(bodyLen)
 		_, err = io.Copy(body, &reader)
@@ -142,8 +142,7 @@ func (s *Session) readLoop() error {
 		select {
 		case <-s.closedC:
 			return nil
-		case *inC <- body:
-			// do nothing
+		case *inC <- body: // send the buffer to stream.inC
 		}
 	}
 }

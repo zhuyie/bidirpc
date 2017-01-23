@@ -24,7 +24,7 @@ func newStream(session *Session, id byte) *stream {
 
 func (s *stream) Read(p []byte) (n int, err error) {
 	if s.reader != nil && s.reader.Len() == 0 {
-		s.session.bp.Put(s.reader)
+		s.session.bp.Put(s.reader) // returns the buffer to the bufferPool
 		s.reader = nil
 	}
 
