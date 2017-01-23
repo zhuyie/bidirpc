@@ -76,7 +76,7 @@ func NewSession(conn io.ReadWriteCloser, yinOrYang YinYang, registry *Registry, 
 // Serve starts the event loop, this is a blocking call.
 func (s *Session) Serve() error {
 	err := s.readLoop()
-	if err != nil && err != io.ErrClosedPipe && err != io.EOF {
+	if err != nil && err != io.ErrClosedPipe && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return err
 	}
 
@@ -126,7 +126,7 @@ func (s *Session) readLoop() error {
 		body := s.bp.Get() // gets a buffer from the bufferPool
 		body.Grow(bodyLen)
 		reader.N = int64(bodyLen)
-		_, err = io.Copy(body, &reader)
+		_, err = copyAtLeast(body, &reader, bodyLen)
 		if err != nil {
 			s.bp.Put(body)
 			return err
