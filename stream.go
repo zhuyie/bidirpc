@@ -42,9 +42,7 @@ func (s *stream) Read(p []byte) (n int, err error) {
 func (s *stream) Write(p []byte) (n int, err error) {
 	if s.writer.Len() == 0 {
 		var dummyHeader [4]byte
-		if n, err := s.writer.Write(dummyHeader[:]); err != nil {
-			return n, err
-		}
+		s.writer.Write(dummyHeader[:])
 	}
 	return s.writer.Write(p)
 }
