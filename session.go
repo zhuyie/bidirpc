@@ -153,9 +153,7 @@ func (s *Session) write(bytes []byte) error {
 
 	_, err := s.conn.Write(bytes)
 	if err != nil {
-		if closeErr := s.doClose(); closeErr != nil {
-			return closeErr
-		}
+		s.doClose()
 	}
 	return err
 }
