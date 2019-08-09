@@ -5,6 +5,10 @@ import (
 	"errors"
 )
 
+const (
+	maxStreamBodyLen = 0xFFFFFF // 16MB
+)
+
 type stream struct {
 	session *Session
 	id      byte
@@ -50,6 +54,9 @@ func (s *stream) Write(p []byte) (n int, err error) {
 func (s *stream) flush() (err error) {
 	buffer := s.writer.Bytes()
 	bodyLen := s.writer.Len() - 4
+	if bodyLen > maxStreamBodyLen {
+		return errors.New("stream body too large")
+	}
 	encodeHeader(buffer, s.id, bodyLen)
 
 	err = s.session.write(buffer)
